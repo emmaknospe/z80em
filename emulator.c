@@ -6,6 +6,9 @@
             do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
 #define ONS printf("Operation not supported!"); exit(1)
 
+
+bool halt = false;
+
 //Registers
 uint8_t A; //accumulator
 uint8_t F; //flag
@@ -54,10 +57,13 @@ uint8_t *getRegister(uint8_t r) {
     ONS;
     return NULL;
 }
-#define BIT_Z  0b01000000
-#define BIT_C  0b00000001
-#define BIT_PO 0b00000100
-#define BIT_S  0b10000000
+#define BIT_Z  0b01000000 //zero bit
+#define BIT_C  0b00000001 //carry bit
+#define BIT_PO 0b00000100 //parity/overflow
+#define BIT_S  0b10000000 //sign
+#define BIT_SB 0b00000010 //subtract
+#define BIT_H  0b00010000 //half carry
+#define FIRST  0b00001111 //first 4 bits 
 bool checkCondition(uint8_t c) {
     switch (c) {
         case 0: return !(BIT_Z & F); 
@@ -71,32 +77,45 @@ bool checkCondition(uint8_t c) {
     }
     ONS;
 }
+void setFlags(uint8_t oldA, bool subtracted) {
+    //preserve F5 and F3, since undocumented
+    F = 0b00101000 & F;
+    //set sign flag by copying MSB of A
+    F = BIT_S & A;
+    //Check if A is nonzero and set zero flag accordingly
+    F = A ? F : (BIT_Z | F);
+    //Set carry if A had a carry operation -- equivalent to A less than oldA
+    //if addition, A > oldA if subtraction 
+    //Half carry same way -- if first half of A < first half oldA
+    //if addition, vice versa for subtraction
+    if (subtracted) {
+        F = A > oldA ? (F | BIT_C) : F;
+        F = F | BIT_SB; //set subtract bit while we're at it
+        F = ((A & FIRST) > (oldA & FIRST)) ? (F | BIT_H) : F;  
+    } else {
+        F = A < oldA ? (F | BIT_C) : F;
+        F = ((A & FIRST) < (oldA & FIRST)) ? (F | BIT_H) : F;  
+    }
+    //TODO: figure out parity/overflow 
+}
 void nop() {
-    printf("NOP\n");
-    exit(1);
+    //using NOP as halt for now
+    halt = true;
 }
 void inc(uint8_t y) {
     uint8_t *reg = getRegister(y);
     uint8_t old = *reg;
     (*reg)++;
     PC++;
-    //probably split flag logic into its own function
-    F = 0b00101000 & F;
-    F = BIT_S & A;
-    F = A ? F : (0b01000000 | F);
-    if (old & 0b00001000 && !((*reg) & 0b00001000)) {
-        F = F | 0b00010000;
-    } 
-    // parity overflow omitted 
-    if (old == 255) {
-        F = F | 0b00000001; 
-    } 
+    setFlags(old, false); 
 }
 //TODO implement changing flags
 void dec(uint8_t y) {
     uint8_t *reg = getRegister(y);
+    uint8_t old = *reg;
     (*reg)--;
     PC++;
+    setFlags(old, true);
 }
 void ldIm(uint8_t y) {
     uint8_t *reg = getRegister(y);
@@ -149,30 +168,24 @@ void x2() {
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
     uint8_t z = mem[PC] & 0b00000111;
     uint8_t *reg = getRegister(z);
-    uint16_t tmp; //recall: cannot declare variables inside switch statements
+    uint8_t oldA = A;
     switch (y) {
         case 0: //ADD A
-            tmp = A + *reg; 
-            F = (tmp > 255) ? (F | BIT_C) : F; //set carry flag if overflow
-            A = tmp;
-            break;
+            A = A + *reg; setFlags(oldA, false); break;
         case 1: //ADC A
-            tmp = *reg + (F & BIT_C); break;
-            F = (tmp > 255) ? (F | BIT_C) : F; //set carry flag if overflow
-            A = tmp;
-            break;
+            A = *reg + (F & BIT_C); setFlags(oldA, false); break;
         case 2: //SUB
-            A -= *reg; break;
+            A -= *reg; setFlags(oldA, true); break;
         case 3: //SBC A
-            A -= *reg + (F & BIT_C); break;
+            A -= *reg + (F & BIT_C); setFlags(oldA, true); break;
         case 4: //AND 
-            A = A & *reg; break;
+            A = A & *reg; setFlags(oldA, false); break;
         case 5: //XOR 
-            A = A ^ *reg; break;
+            A = A ^ *reg; setFlags(oldA, false); break;
         case 6: //OR
-            A = A | *reg; break;
+            A = A | *reg; setFlags(oldA, false); break;
         case 7: //CP
-            A = A - *reg; //flag set here
+            A = A - *reg; setFlags(oldA, true); A = oldA; break; 
             break;
     }
     ONS;
@@ -214,8 +227,11 @@ int emulate(char *codeFile) {
     fread(mem, codeLength, 1, code);
     dump(codeLength);
     PC = 0;
-    while (PC < codeLength) { 
+    int i = 0;
+    while (PC < codeLength && !halt) { 
         execute();
+        i++;
     }
+    printf("Executed %i instructions before halting\n", i);
     return 0;
 }

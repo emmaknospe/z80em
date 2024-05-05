@@ -76,8 +76,9 @@ void compile(char *assemblyFilename, char *machineFilename) {
     // First pass: get labels
     uint16_t startAddr = 0;
     uint16_t addr = 0;
+    uint16_t temp = 0;
     int lines = 0;
-    char outBuffer[4];
+    uint8_t outBuffer[4];
     while ((status = scanToken(assembly, &lines)) != EOF) {
         switch (state) {
             case STD:
@@ -88,24 +89,36 @@ void compile(char *assemblyFilename, char *machineFilename) {
                     if (eq(readBuffer, ".ORG")) {
                         state = ORG; 
                     }
+                    if (eq(readBuffer, ".BYTE")) {
+                        state = BYTE;
+                    }
+                    if (eq(readBuffer, ".WORD")) {
+                        state = WORD;
+                    }
                 } else {
-                    addr += convertInstruction(assembly, outBuffer, readBuffer);
+                    addr += convertInstruction(assembly, outBuffer, readBuffer, NULL);
                 }
+                break;
             case ORG:
                 startAddr = (uint16_t) atoi(readBuffer);
                 addr = startAddr;
                 state = STD;
                 break;
-            case BYTE: break;
-            case WORD: break;
-            case EQU: break;
+            case BYTE: 
+                state = STD;
+                break;
+            case WORD: 
+                state = STD;
+                break;
+            case EQU: 
+                printf("Compiler instruction .EQU not yet supported!\n");
+                exit(1);
+                state = STD;
+                break;
         }
     }
-    fclose(assembly);
-    //label conversion pass goes in here
-    //right now just print to debug
-    printLabels(labels); 
-    assembly = fopen(assemblyFilename, "r"); 
+    printf("First pass complete.\n"); 
+    rewind(assembly);
     FILE *out = fopen(machineFilename, "wb");
     if (out == NULL) {
         printf("Error! Could not write to file %s\n", machineFilename);
@@ -113,27 +126,41 @@ void compile(char *assemblyFilename, char *machineFilename) {
     while ((status = scanToken(assembly, &lines)) != EOF) {
         switch (state) {
             case STD:
-                if (in(':', readBuffer)) {
-                    //signifies label definition    
-                    labels = makeAndAppendLabel(readBuffer, addr, labels); 
+                if (!in(':', readBuffer) && !in('.', readBuffer)) {
+                    int size = convertInstruction(assembly, outBuffer, readBuffer, labels);
+                    fwrite(outBuffer, size, sizeof(uint8_t), out); //standard line, compile
                 } else if (in('.', readBuffer)) {
                     if (eq(readBuffer, ".ORG")) {
                         state = ORG; 
                     }
-                } else {
-                    int size = convertInstruction(assembly, outBuffer, readBuffer);
-                    fwrite(outBuffer, size, sizeof(char), out);
+                    if (eq(readBuffer, ".BYTE")) {
+                        state = BYTE;
+                    }
+                    if (eq(readBuffer, ".WORD")) {
+                        state = WORD;
+                    }
                 }
+                break; 
             case ORG:
                 startAddr = (uint16_t) atoi(readBuffer);
                 addr = startAddr;
                 state = STD;
                 break;
-            case BYTE: break;
-            case WORD: break;
+            case BYTE: 
+                outBuffer[0] = (uint8_t) atoi(readBuffer);
+                fwrite(outBuffer, 1, sizeof(uint8_t), out);
+                state = STD;
+                break;
+            case WORD: 
+                temp = (uint16_t) atoi(readBuffer);
+                outBuffer[0] = (uint8_t) temp;
+                outBuffer[1] = (uint8_t) (temp >> 8);
+                fwrite(outBuffer, 2, sizeof(uint8_t), out); 
+                state = STD;
+                break;
             case EQU: break;
         }
     }
-
+    printf("Successfully compiled %i lines!\n", lines);
 }
 

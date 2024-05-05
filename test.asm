@@ -1,3 +1,4 @@
-LD A, 0 
-INC A
-JP NZ,2 
+test:
+    LD A, 1
+.BYTE 55 
+.WORD 1567

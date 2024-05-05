@@ -8,6 +8,6 @@
 #include "label.h"
 
 
-int convertInstruction(FILE *assembly, char *outBuffer, char *instruction); 
+int convertInstruction(FILE *assembly, uint8_t *outBuffer, char *instruction, Label *labels); 
 
 #endif

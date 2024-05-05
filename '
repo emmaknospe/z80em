@@ -32,25 +32,21 @@ void replaceLabelsAndCopy(Label *labels, char *out) {
         for (; labels != NULL; labels = labels->next) {
             if (eq(subString, labels->label)) {
                 len = strlen(labels->label);
+                i += len; 
                 if (i >= 64) {
                     printf("Error! Replace buffer overflow.\n");
                     exit(1);
                 }
                 subString += len; 
-                int ret = sprintf(out + i, "%i", labels->value);
-                if (ret < 0) {
-                    printf("sprintf errored on write!\n");
-                    exit(1);
-                }
-                i += ret;
-                goto loopEnd;
-            } 
+                sprintf(out + len, "%i", labels->value);
+                break;
+            } else {
+                          }
         }
         out[i] = *subString; 
         i++;
-        loopEnd: ; 
+
     }
-    out[i] = 0;
 }
 
 void loadBuf(FILE *a, Label *labels) {
@@ -74,6 +70,8 @@ void loadBuf(FILE *a, Label *labels) {
     } else {
         replaceLabelsAndCopy(labels, arg1);
     }
+    printf("Arg1: %s\n", arg1);
+    printf("Arg2: %s\n", arg2);
 }
 
 int getCondCode(char *cond) {
@@ -170,7 +168,7 @@ bool isData(char *data) {
 
 
 
-int nop(FILE *a, uint8_t *o) {
+int nop(FILE *a, char *o) {
     o[0] = 0x00;
     return 1; 
 }
@@ -185,7 +183,7 @@ int nop(FILE *a, uint8_t *o) {
  * ld reg, reg
  * ld reg,data
  */
-int ld(FILE *a, uint8_t *o) {
+int ld(FILE *a, char *o) {
     if (eq(arg2, "(HL)")) {
         int regCode = getRegCode(arg1) << 3;
         o[0] = 0b01000110 | regCode; 
@@ -231,7 +229,7 @@ int ld(FILE *a, uint8_t *o) {
     return 0;
 } 
 
-int inc(FILE *a, uint8_t *o) {
+int inc(FILE *a, char *o) {
     if (isRegister(arg1)) {
         int regCode = getRegCode(arg1) << 3;
         o[0] = 0b00000100 | regCode; 
@@ -241,7 +239,7 @@ int inc(FILE *a, uint8_t *o) {
     exit(1);
     return 0;
 }
-int dec(FILE *a, uint8_t *o) {
+int dec(FILE *a, char *o) {
     if (isRegister(arg1)) {
         int regCode = getRegCode(arg1) << 3;
         o[0] = 0b00000101 | regCode; 
@@ -252,7 +250,7 @@ int dec(FILE *a, uint8_t *o) {
     return 0;
 }
 
-int jp(FILE *a, uint8_t *o) {
+int jp(FILE *a, char *o) {
     if (isCond(arg1)) {
         int condCode = getCondCode(arg1) << 3;
         o[0] = 0b11000010 | condCode;
@@ -272,7 +270,7 @@ int jp(FILE *a, uint8_t *o) {
     return 0;
 
 }
-int add(FILE *a, uint8_t *o) {
+int add(FILE *a, char *o) {
     if (eq(arg1, "A")) {
         if (isRegister(arg2)) {
             o[0] = 0b10000000 | getRegCode(arg2);
@@ -359,7 +357,7 @@ char opStrings[69][10] = {
     "DAA"
 };
 int IMPLEMENTED = 6;
-int (*operations[69])(FILE *, uint8_t *) = {
+int (*operations[69])(FILE *, char *) = {
     nop,
     ld,
     inc,
@@ -369,7 +367,7 @@ int (*operations[69])(FILE *, uint8_t *) = {
 };
 
 
-int convertInstruction(FILE *assembly, uint8_t *outBuffer, char *instruction, Label *labels) {
+int convertInstruction(FILE *assembly, char *outBuffer, char *instruction, Label *labels) {
     loadBuf(assembly, labels);
     for (int i = 0; i < IMPLEMENTED; i++) {
         if (eq(instruction, opStrings[i])) {
