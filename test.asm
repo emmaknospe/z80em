@@ -1,6 +1,4 @@
-.ORG 64
-start:
-    ld a, 1
-end:
-loop:
-    jp start
+LD A, 1
+LD B, 2
+INC A
+JP 0 

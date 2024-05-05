@@ -54,9 +54,6 @@ int scanToken(FILE *file, int *lines) {
         return EOF;
     }
 }
-bool isData(char *string) {
-    return strlen(string) > 2 && string[0] != '(';
-}
 /*
  * Prints error message if token not found.
  */
@@ -70,6 +67,9 @@ int getExpected(FILE *file, int *lines, char *message) {
 }
 void compile(char *assemblyFilename, char *machineFilename) {
     FILE *assembly = fopen(assemblyFilename, "r");
+    if (assembly == NULL) {
+        printf("Error! Could not find file %s\n", assemblyFilename);
+    }
     int status;
     enum CSTATE {STD, ORG, BYTE, WORD, EQU} state = STD;
     Label *labels = NULL;
@@ -77,7 +77,7 @@ void compile(char *assemblyFilename, char *machineFilename) {
     uint16_t startAddr = 0;
     uint16_t addr = 0;
     int lines = 0;
-    char outBuffer[16];
+    char outBuffer[4];
     while ((status = scanToken(assembly, &lines)) != EOF) {
         switch (state) {
             case STD:
@@ -89,7 +89,7 @@ void compile(char *assemblyFilename, char *machineFilename) {
                         state = ORG; 
                     }
                 } else {
-                    convertInstruction(assembly, outBuffer, &addr, NULL);
+                    addr += convertInstruction(assembly, outBuffer, readBuffer);
                 }
             case ORG:
                 startAddr = (uint16_t) atoi(readBuffer);
@@ -101,6 +101,39 @@ void compile(char *assemblyFilename, char *machineFilename) {
             case EQU: break;
         }
     }
+    fclose(assembly);
+    //label conversion pass goes in here
+    //right now just print to debug
     printLabels(labels); 
+    assembly = fopen(assemblyFilename, "r"); 
+    FILE *out = fopen(machineFilename, "wb");
+    if (out == NULL) {
+        printf("Error! Could not write to file %s\n", machineFilename);
+    }
+    while ((status = scanToken(assembly, &lines)) != EOF) {
+        switch (state) {
+            case STD:
+                if (in(':', readBuffer)) {
+                    //signifies label definition    
+                    labels = makeAndAppendLabel(readBuffer, addr, labels); 
+                } else if (in('.', readBuffer)) {
+                    if (eq(readBuffer, ".ORG")) {
+                        state = ORG; 
+                    }
+                } else {
+                    int size = convertInstruction(assembly, outBuffer, readBuffer);
+                    fwrite(outBuffer, size, sizeof(char), out);
+                }
+            case ORG:
+                startAddr = (uint16_t) atoi(readBuffer);
+                addr = startAddr;
+                state = STD;
+                break;
+            case BYTE: break;
+            case WORD: break;
+            case EQU: break;
+        }
+    }
+
 }
 
