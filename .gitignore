@@ -3,3 +3,4 @@ bin/
 compiler
 emulator
 out
+*.swp

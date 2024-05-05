@@ -1,9 +1,12 @@
 #include "emulator.h"
 
 #define MEM_SPACE 65536
-#define DISASSEMBLE true
-#define debug_print(fmt, ...) \
-            do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
+#define DEBUG true;
+#ifdef DEBUG
+    #define debug_info(M, ...) fprintf(stderr, "[INFO] (%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#else
+    #define debug_info(M, ...)
+#endif
 #define ONS() printf("Operation not supported!"); exit(1)
 
 
@@ -22,9 +25,9 @@ uint8_t E;
 uint8_t H;
 uint8_t L;
 
-uint16_t PC;
+uint16_t PC; //program counter
 
-uint16_t SP;
+uint16_t SP; //stack pointer
 
 uint8_t mem[MEM_SPACE];
 int main() {
@@ -46,6 +49,7 @@ void dump(int length) {
     } 
 }
 uint8_t *getRegister(uint8_t r) {
+    debug_info("Getting register with index %i", r);
     switch (r) {
         case 0: return &B;
         case 1: return &C;
@@ -61,6 +65,7 @@ uint8_t *getRegister(uint8_t r) {
 }
 
 void setRegisterPair(uint8_t p, uint16_t newVal) {
+    debug_info("Setting register pair %i to value %i", p, newVal);
     switch (p) {
         case 0:
             C = newVal & 0x00FF;
@@ -81,6 +86,8 @@ void setRegisterPair(uint8_t p, uint16_t newVal) {
 
 uint16_t getRegisterPair(uint8_t p) {
     uint16_t res = 0;
+    // TODO: is res needed?
+    debug_info("Getting register pair %i", p); 
     switch (p) {
         case 0:
             return ((res | B) << 8) | C;
@@ -139,7 +146,7 @@ void outputToPort(uint8_t portAddr, uint8_t value) {
     //use port 0 as terminal output 
     switch (portAddr) {
         case 0: printf("%c", value); return;
-        case 1: printf("%i\n", value); return;
+        case 1: printf("[HARDWARE PORT 1]: %i\n", value); return;
     }
     ONS();
 }
@@ -149,6 +156,7 @@ void nop() {
     printf("Nopped\n");
 }
 void inc(uint8_t y) {
+    debug_info("Incrementing register %i", y);
     uint8_t *reg = getRegister(y);
     uint8_t old = *reg;
     (*reg)++;
@@ -156,6 +164,7 @@ void inc(uint8_t y) {
     setFlags(old, false); 
 }
 void dec(uint8_t y) {
+    debug_info("Decrementing register %i", y);
     uint8_t *reg = getRegister(y);
     uint8_t old = *reg;
     (*reg)--;
@@ -164,6 +173,7 @@ void dec(uint8_t y) {
 }
 //load an immediate operand
 void ldImOp(uint8_t y) {
+    debug_info("Loading immediate operand into register %i", y);
     uint8_t *reg = getRegister(y);
     PC++;
     (*reg) = mem[PC];
@@ -171,11 +181,13 @@ void ldImOp(uint8_t y) {
 }
 //load an immediate operand, 16 bits
 void ldImOp16(uint8_t p) {
+    debug_info("Loading immediate operand into 16-bit register %i", p);
     PC++;
-    uint8_t lsb = mem[PC];
+    uint16_t lsb = mem[PC];
     PC++;
-    uint8_t msb = mem[PC]; 
+    uint16_t msb = mem[PC]; 
     uint16_t value = lsb | (msb << 8);
+    debug_info("Loaded value %i", value);
     setRegisterPair(p, value);
     PC++;
 }
@@ -253,12 +265,11 @@ void x0() {
                 default: ONS();
             } 
         case 1:
-            if (q) {
-                //q = 1
+            if (q == 0) {
                 ldImOp16(p); 
             } else {
                 add16(p);
-            }
+            }; return;
         case 4: inc(y); return; 
         case 5: dec(y); return; 
         case 6: ldImOp(y); return; 
@@ -274,9 +285,11 @@ void x1() {
         halt = true;
         return; 
     }
+    debug_info("Loading register %i into register %i", y, z);
     uint8_t *yReg = getRegister(y);
     uint8_t *zReg = getRegister(z);
     *yReg = *zReg;
+    PC++;
 }
 void x2() {
     //All commands for x = 2 are ALU ops
@@ -303,6 +316,7 @@ void x3() {
 }
 
 void execute() {
+    debug_info("Byte at PC: %s", byteToBinary(mem[PC])); 
     uint8_t x = (mem[PC] & 0b11000000) >> 6;
     switch (x) {
         case 0: x0(); break;
@@ -322,7 +336,7 @@ int emulate(char *codeFile) {
         exit(1);
     }
     fread(mem, codeLength, 1, code);
-    //dump(codeLength);
+    dump(codeLength);
     PC = 0;
     int i = 0;
     while (PC < codeLength && !halt) { 

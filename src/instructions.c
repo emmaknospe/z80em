@@ -162,6 +162,33 @@ bool isRegister(char *reg) {
     }
     return false;
 }
+
+int get16BitRegCode(char *reg) {
+    if (eq(reg, "BC")) {
+        return 0;
+    } else if (eq(reg, "DE")) {
+        return 1;
+    } else if (eq(reg, "HL")) {
+        return 2;
+    } else if (eq(reg, "SP")) {
+        return 3;
+    }
+    error("Unrecognized 16-bit register!");
+}
+
+bool is16BitRegister(char *reg) {
+    if (eq(reg, "BC")) {
+        return true;
+    } else if (eq(reg, "DE")) {
+        return true;
+    } else if (eq(reg, "HL")) {
+        return true;
+    } else if (eq(reg, "SP")) {
+        return true;
+    } else {
+        return false;
+    }
+}
 //is data of the form <label>?
 bool isLabel(char *data) {
     if (!isLetter(*data) || isRegister(data) || isCond(data)) {
@@ -290,7 +317,16 @@ int ld(FILE *a, uint8_t *o) {
             o[1] = (char) atoi(arg2);
             return 2;
         }
-    } 
+    } if (is16BitRegister(arg1)) {
+        if (isData(arg2)) {
+            int regCode = get16BitRegCode(arg1) << 4;
+            o[0] = 0b00000001 | regCode;
+            uint16_t argument = atoi(arg2);
+            o[1] = argument & 0xFF; 
+            o[2] = argument >> 8 & 0xFF;
+            return 3; 
+        }
+    }
     error("Unsupported operation for LD!");
     return 0;
 } 

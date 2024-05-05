@@ -16,3 +16,5 @@ Currently supports:
 * cp: Compares registers and sets flags
 * halt: Halts execution
 * nop: Does nothing!
+
+Run "make" in directory to make files. Run ./run to execute assembly

@@ -1,11 +1,7 @@
-    LD A, 55 
-    CP 55 
-    JP Z, equal
-    LD A, 0
-    OUT (1), A
-    HALT
-equal:
-    LD A, 1
-    OUT (1), A
+    LD BC, 1000 
+    LD A, B
+    OUT (1), A 
+    LD A, C
+    OUT (1), A 
     HALT
 

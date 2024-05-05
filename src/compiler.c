@@ -11,7 +11,8 @@ int main(int argc, char *argv[]) {
         assembly = argv[1];
         out = "out";
     } else {
-        printf("Please input in the following form: ./compiler {assembly} {out (optional, defaults to 'out')}");
+        printf("Please input in the following form: ./compiler {assembly} {out (optional, defaults to 'out')}\n");
+        return 1;
     }
     compile(assembly, out);
 }
