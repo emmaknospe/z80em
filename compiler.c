@@ -22,10 +22,17 @@ char readBuffer[256];
 int scanToken(FILE *file, int *lines) {
     char c;
     int bufLength = 0;
+    bool completeExit = false;
     while ((c = fgetc(file)) != EOF) {
         switch (c) {
             case '\n':
                 (*lines)++;
+                if (bufLength != 0) {
+                    ungetc(c, file); //necessary so our instruction parser doesn't overflow onto the next line
+                    readBuffer[bufLength] = 0;
+                    return 0;
+                }
+                break;
             case ' ':
             case ',':
                 if (bufLength != 0) {
@@ -77,89 +84,96 @@ void compile(char *assemblyFilename, char *machineFilename) {
     uint16_t startAddr = 0;
     uint16_t addr = 0;
     uint16_t temp = 0;
+    char c;
     int lines = 0;
     uint8_t outBuffer[4];
     while ((status = scanToken(assembly, &lines)) != EOF) {
-        switch (state) {
-            case STD:
-                if (in(':', readBuffer)) {
-                    //signifies label definition    
-                    labels = makeAndAppendLabel(readBuffer, addr, labels); 
-                } else if (in('.', readBuffer)) {
-                    if (eq(readBuffer, ".ORG")) {
-                        state = ORG; 
-                    }
-                    if (eq(readBuffer, ".BYTE")) {
-                        state = BYTE;
-                    }
-                    if (eq(readBuffer, ".WORD")) {
-                        state = WORD;
-                    }
-                } else {
-                    addr += convertInstruction(assembly, outBuffer, readBuffer, NULL);
+        if (in(':', readBuffer)) {
+            //signifies label definition    
+            labels = makeAndAppendLabel(readBuffer, addr, labels); 
+        } else if (in('.', readBuffer)) {
+            if (eq(readBuffer, ".ORG")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
                 }
-                break;
-            case ORG:
                 startAddr = (uint16_t) atoi(readBuffer);
                 addr = startAddr;
-                state = STD;
-                break;
-            case BYTE: 
-                state = STD;
-                break;
-            case WORD: 
-                state = STD;
-                break;
-            case EQU: 
-                printf("Compiler instruction .EQU not yet supported!\n");
-                exit(1);
-                state = STD;
-                break;
+            }
+            if (eq(readBuffer, ".BYTE")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
+                }
+
+            }
+            if (eq(readBuffer, ".WORD")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
+                }
+            }
+        } else {
+            addr += convertInstruction(assembly, outBuffer, readBuffer, NULL, lines, true);
         }
+        //finish reading the line:
+        while ((c = fgetc(assembly)) != EOF && c != '\n') {};
+        if (c == EOF) {
+            printf("breaking\n");
+            break;
+        }
+        lines++;
     }
     printf("First pass complete.\n"); 
     rewind(assembly);
+    //printLabels(labels);
+    lines = 0;
     FILE *out = fopen(machineFilename, "wb");
     if (out == NULL) {
         printf("Error! Could not write to file %s\n", machineFilename);
     }
     while ((status = scanToken(assembly, &lines)) != EOF) {
-        switch (state) {
-            case STD:
-                if (!in(':', readBuffer) && !in('.', readBuffer)) {
-                    int size = convertInstruction(assembly, outBuffer, readBuffer, labels);
-                    fwrite(outBuffer, size, sizeof(uint8_t), out); //standard line, compile
-                } else if (in('.', readBuffer)) {
-                    if (eq(readBuffer, ".ORG")) {
-                        state = ORG; 
-                    }
-                    if (eq(readBuffer, ".BYTE")) {
-                        state = BYTE;
-                    }
-                    if (eq(readBuffer, ".WORD")) {
-                        state = WORD;
-                    }
+        if (in(':', readBuffer)) {
+            //signifies label definition    
+            labels = makeAndAppendLabel(readBuffer, addr, labels); 
+        } else if (in('.', readBuffer)) {
+            if (eq(readBuffer, ".ORG")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
                 }
-                break; 
-            case ORG:
                 startAddr = (uint16_t) atoi(readBuffer);
                 addr = startAddr;
-                state = STD;
-                break;
-            case BYTE: 
+            }
+            if (eq(readBuffer, ".BYTE")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
+                }
                 outBuffer[0] = (uint8_t) atoi(readBuffer);
                 fwrite(outBuffer, 1, sizeof(uint8_t), out);
-                state = STD;
-                break;
-            case WORD: 
+            }
+            if (eq(readBuffer, ".WORD")) {
+                status = scanToken(assembly, &lines);
+                if (status == EOF) {
+                    break;
+                }
                 temp = (uint16_t) atoi(readBuffer);
                 outBuffer[0] = (uint8_t) temp;
                 outBuffer[1] = (uint8_t) (temp >> 8);
                 fwrite(outBuffer, 2, sizeof(uint8_t), out); 
-                state = STD;
-                break;
-            case EQU: break;
+            }
+        } else {
+            int size = convertInstruction(assembly, outBuffer, readBuffer, labels, lines, false);
+            lines++;
+            fwrite(outBuffer, size, sizeof(uint8_t), out); //standard line, compile
         }
+        //finish reading the line:
+        while ((c = fgetc(assembly)) != EOF && c != '\n') {};
+        if (c == EOF) {
+            break;
+        }
+        lines++;
     }
     printf("Successfully compiled %i lines!\n", lines);
 }

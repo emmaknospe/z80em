@@ -98,9 +98,19 @@ void setFlags(uint8_t oldA, bool subtracted) {
     }
     //TODO: figure out parity/overflow 
 }
+
+void outputToPort(uint8_t portAddr, uint8_t value) {
+    //use port 0 as terminal output 
+    switch (portAddr) {
+        case 0: printf("%c", value); return;
+        case 1: printf("%i\n", value); return;
+    }
+    ONS;
+}
+
 void nop() {
-    //using NOP as halt for now
-    halt = true;
+    //for debug right now
+    printf("Nopped\n");
 }
 void inc(uint8_t y) {
     uint8_t *reg = getRegister(y);
@@ -117,11 +127,19 @@ void dec(uint8_t y) {
     PC++;
     setFlags(old, true);
 }
-void ldIm(uint8_t y) {
+//load an immediate operand
+void ldImOp(uint8_t y) {
     uint8_t *reg = getRegister(y);
     PC++;
     (*reg) = mem[PC];
     PC++;
+}
+//OUT (n), A
+void outImOp() {
+    PC++;
+    uint8_t portAddr = mem[PC];
+    PC++;
+    outputToPort(portAddr, A); 
 }
 void jp(uint8_t y) {
     if (checkCondition(y)) {
@@ -143,6 +161,32 @@ void jpNc() {
     second = first | second << 8; 
     PC = second; 
 }
+void alu8(uint8_t operation, uint8_t value) {
+    uint8_t oldA = A;
+    switch (operation) {
+        case 0: //ADD A
+            A = A + value; setFlags(oldA, false); break;
+        case 1: //ADC A
+            A = value + (F & BIT_C); setFlags(oldA, false); break;
+        case 2: //SUB
+            A -= value; setFlags(oldA, true); break;
+        case 3: //SBC A
+            A -= value + (F & BIT_C); setFlags(oldA, true); break;
+        case 4: //AND 
+            A = A & value; setFlags(oldA, false); break;
+        case 5: //XOR 
+            A = A ^ value; setFlags(oldA, false); break;
+        case 6: //OR
+            A = A | value; setFlags(oldA, false); break;
+        case 7: //CP
+            A = A - value; setFlags(oldA, true); A = oldA; break; 
+    }
+    PC++;
+}
+void alu8ImOp(uint8_t y) {
+    PC++;
+    alu8(y, mem[PC]);  
+}
 void x0() {
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
     uint8_t z = mem[PC] & 0b00000111;
@@ -154,41 +198,29 @@ void x0() {
             } 
         case 4: inc(y); return; 
         case 5: dec(y); return; 
-        case 6: ldIm(y); return; 
+        case 6: ldImOp(y); return; 
         default: ONS;
     }
 }
 void x1() {
+    //All commands for x = 1 are LD [y][z]
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
     uint8_t z = mem[PC] & 0b00000111;
-    ONS;
+    if (y == 6 && z == 6) {
+        //halt
+        halt = true;
+        return; 
+    }
+    uint8_t *yReg = getRegister(y);
+    uint8_t *zReg = getRegister(z);
+    *yReg = *zReg;
 }
 void x2() {
     //All commands for x = 2 are ALU ops
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
     uint8_t z = mem[PC] & 0b00000111;
     uint8_t *reg = getRegister(z);
-    uint8_t oldA = A;
-    switch (y) {
-        case 0: //ADD A
-            A = A + *reg; setFlags(oldA, false); break;
-        case 1: //ADC A
-            A = *reg + (F & BIT_C); setFlags(oldA, false); break;
-        case 2: //SUB
-            A -= *reg; setFlags(oldA, true); break;
-        case 3: //SBC A
-            A -= *reg + (F & BIT_C); setFlags(oldA, true); break;
-        case 4: //AND 
-            A = A & *reg; setFlags(oldA, false); break;
-        case 5: //XOR 
-            A = A ^ *reg; setFlags(oldA, false); break;
-        case 6: //OR
-            A = A | *reg; setFlags(oldA, false); break;
-        case 7: //CP
-            A = A - *reg; setFlags(oldA, true); A = oldA; break; 
-            break;
-    }
-    ONS;
+    alu8(y, *reg);
 }
 void x3() {
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
@@ -199,7 +231,9 @@ void x3() {
         case 3:
             switch (y) {
                 case 0: jpNc(); return;
+                case 2: outImOp(); return; 
             }
+        case 6: alu8ImOp(y); return;
         default: ONS;
     }
 
@@ -225,7 +259,7 @@ int emulate(char *codeFile) {
         exit(1);
     }
     fread(mem, codeLength, 1, code);
-    dump(codeLength);
+    //dump(codeLength);
     PC = 0;
     int i = 0;
     while (PC < codeLength && !halt) { 
