@@ -1,4 +1,3 @@
-LD A, 1
-LD B, 2
+LD A, 0 
 INC A
-JP 0 
+JP NZ,2 
