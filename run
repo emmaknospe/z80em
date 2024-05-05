@@ -1,8 +1,9 @@
 #!/bin/bash
+value=${1:-in.asm}
 echo ""
 echo "#### COMPILER OUTPUT ####"
 echo ""
-./compiler 
+./compiler asmsrc/$1
 echo ""
 echo "#### EMULATOR OUTPUT ####"
 echo ""

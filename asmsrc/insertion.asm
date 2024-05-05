@@ -1,0 +1,53 @@
+;; GOAL: GET THIS TO RUN (INSERTION SORT)
+    LD HL, ARRAY
+    PUSH HL
+    POP DE
+    LD A, (ARRAYLENGTH)
+    LD B, A
+    INC HL ; START HL POINTING AT ARRAY + 1
+ELEMENTLOOP:
+    LD A, (HL)
+    PUSH HL
+COMPARELOOP:
+    DEC HL
+    SBC HL, DE
+    JP Z, INSERTATEND
+    ADC HL, DE
+    CP (HL)
+    JP NC, INSERT
+    LD C, A
+    LD A, (HL)
+    INC HL
+    LD (HL), A
+    DEC HL 
+    LD A, C
+    JP COMPARELOOP
+INSERTATEND:
+    ADC HL, DE
+INSERT:
+    LD (HL), A
+    POP HL
+    INC HL
+    DEC B
+    JP NZ, ELEMENTLOOP
+    LD HL, ARRAYLENGTH
+    LD A, (HL)
+    LD B, A
+    INC HL
+PRINTLOOP:
+    LD A, (HL)
+    OUT (0), A
+    DEC B
+    JP NZ, PRINTLOOP 
+    HALT
+ARRAYLENGTH:
+    .BYTE 8
+ARRAY:
+    .BYTE 5
+    .BYTE 9
+    .BYTE 7
+    .BYTE 3
+    .BYTE 13
+    .BYTE 11
+    .BYTE 8
+    .BYTE 4

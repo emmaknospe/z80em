@@ -1,8 +1,19 @@
 #include "compiler.h"
 
 bool in(char c, char *string);
-int main() {
-    compile("test.asm", "out");
+int main(int argc, char *argv[]) {
+    char *assembly;
+    char *out;
+    if (argc == 3) {
+        assembly = argv[1];
+        out = argv[2];
+    } else if (argc == 2) {
+        assembly = argv[1];
+        out = "out";
+    } else {
+        printf("Please input in the following form: ./compiler {assembly} {out (optional, defaults to 'out')}");
+    }
+    compile(assembly, out);
 }
 /*
  * String equality checker for readability

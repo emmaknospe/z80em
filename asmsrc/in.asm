@@ -1,4 +1,4 @@
-    LD A, 56 
+    LD A, 55 
     CP 55 
     JP Z, equal
     LD A, 0
