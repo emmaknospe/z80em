@@ -36,7 +36,7 @@ INSERT:
     INC HL
 PRINTLOOP:
     LD A, (HL)
-    OUT (0), A
+    OUT (1), A
     DEC B
     JP NZ, PRINTLOOP 
     HALT

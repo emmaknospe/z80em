@@ -176,6 +176,20 @@ int get16BitRegCode(char *reg) {
     error("Unrecognized 16-bit register!");
 }
 
+// includes AF instead of SP
+int get16BitRegCodeWithAF(char *reg) {
+    if (eq(reg, "BC")) {
+        return 0;
+    } else if (eq(reg, "DE")) {
+        return 1;
+    } else if (eq(reg, "HL")) {
+        return 2;
+    } else if (eq(reg, "AF")) {
+        return 3;
+    }
+    error("Unrecognized 16-bit register!");
+}
+
 bool is16BitRegister(char *reg) {
     if (eq(reg, "BC")) {
         return true;
@@ -184,6 +198,19 @@ bool is16BitRegister(char *reg) {
     } else if (eq(reg, "HL")) {
         return true;
     } else if (eq(reg, "SP")) {
+        return true;
+    } else {
+        return false;
+    }
+}
+bool is16BitRegisterWithAF(char *reg) {
+    if (eq(reg, "BC")) {
+        return true;
+    } else if (eq(reg, "DE")) {
+        return true;
+    } else if (eq(reg, "HL")) {
+        return true;
+    } else if (eq(reg, "AF")) {
         return true;
     } else {
         return false;
@@ -224,7 +251,7 @@ bool isAddressedLabel(char *addrData) {
     addrData++;
     for (; *addrData != 0 && *addrData != ')'; addrData++) {
         if (!(isDigit(*addrData) || isLetter(*addrData))) {
-            return false;
+            break;
         }
     }
     if (*addrData != ')') {
@@ -262,6 +289,19 @@ bool isAddressedData(char *data) {
     return isAddressedNumber(data) || (FIRST_PASS && isAddressedLabel(data));
 }
 
+int getAddressedData(char *data) {
+    char *a;
+    //find close paren of addressed data 
+    for (a = arg1; *a != ')'; a++) {}
+    *a = 0; //replace close paren with null to terminate string
+    char *b = arg1 + 1; //set up new pointer to directly past first open paren 
+    //we now are set up to use atoi to parse the integer out
+    int toReturn = atoi(b);
+    // return data to previous value:
+    *a = ')';
+    return toReturn;
+}
+
 
 int nop(FILE *a, uint8_t *o) {
     o[0] = 0x00;
@@ -279,33 +319,34 @@ int nop(FILE *a, uint8_t *o) {
  * ld reg,data
  */
 int ld(FILE *a, uint8_t *o) {
-    if (eq(arg2, "(HL)")) {
-        int regCode = getRegCode(arg1) << 3;
-        o[0] = 0b01000110 | regCode; 
-        return 1; 
-    } else if (eq(arg1, "(HL)")) {
-        int regCode = getRegCode(arg2) << 3;
-        o[0] = 0b01110000 | regCode;
-        return 1;
-    } else if (eq(arg1, "A") && !isData(arg2)) {
-        if (eq(arg2, "")) {
-            error("Load expects two arguments!");
-        } else if (eq(arg2, "(BC)")) {
-            o[0] = 0x0A; 
-            return 1;
-        } else if (eq(arg2, "(DE)")) {
-            o[0] = 0x1A;    
-            return 1;
-        } 
-    } else if (eq(arg2, "A") && !isData(arg2)) {
-        if (eq(arg1, "(BC)")) {
-            o[0] = 0x02;
-            return 1;
-        } else if (eq(arg1, "(DE)")) {
-            o[0] = 0x12;
-            return 1;
-        } 
-    } if (isRegister(arg1)) {
+    if (isRegister(arg1)) {
+        if (eq(arg1, "A")) {
+            if (eq(arg2, "")) {
+                error("Load expects two arguments!");
+            } else if (eq(arg2, "(BC)")) {
+                o[0] = 0x0A; 
+                return 1;
+            } else if (eq(arg2, "(DE)")) {
+                o[0] = 0x1A;    
+                return 1;
+            } else if (isAddressedData(arg2)) {
+                // x = 0, z = 2, q = 1, p = 3 
+                o[0] = 0x3A; 
+                o[1] = getAddressedData(arg2); 
+                return 2;
+            }
+            if (eq(arg2, "(BC)")) {
+                o[0] = 0x0A;
+                return 1;
+            } else if (eq(arg2, "(DE)")) {
+                o[0] = 0x1A;
+                return 1;
+            } else if (isAddressedData(arg2)) {
+                o[0] = 0x3A;
+                o[1] = getAddressedData(arg2);
+                return 2;
+            }
+        }
         if (isRegister(arg2)) {
             int regCodeA = getRegCode(arg1) << 3;
             int regCodeB = getRegCode(arg2);
@@ -314,10 +355,15 @@ int ld(FILE *a, uint8_t *o) {
         } else if (isData(arg2)) {
             int regCode = getRegCode(arg1) << 3;
             o[0] = 0b00000110 | regCode; 
-            o[1] = (char) atoi(arg2);
+            o[1] = (uint8_t) atoi(arg2);
             return 2;
         }
-    } if (is16BitRegister(arg1)) {
+        if (eq(arg2, "(HL)")) {
+            int regCode = getRegCode(arg1) << 3;
+            o[0] = 0b01000110 | regCode; 
+            return 1; 
+        } 
+    } else if (is16BitRegister(arg1)) {
         if (isData(arg2)) {
             int regCode = get16BitRegCode(arg1) << 4;
             o[0] = 0b00000001 | regCode;
@@ -326,7 +372,20 @@ int ld(FILE *a, uint8_t *o) {
             o[2] = argument >> 8 & 0xFF;
             return 3; 
         }
-    }
+    } else if (eq(arg1, "(HL)")) {
+        int regCode = getRegCode(arg2) << 3;
+        o[0] = 0b01110000 | regCode;
+        return 1;
+    } else if (eq(arg2, "A")) {
+        if (eq(arg1, "(BC)")) {
+            o[0] = 0x02;
+            return 1;
+        } else if (eq(arg1, "(DE)")) {
+            o[0] = 0x12;
+            return 1;
+        } 
+    } 
+    printf("LD %s, %s\n", arg1, arg2);
     error("Unsupported operation for LD!");
     return 0;
 } 
@@ -336,6 +395,10 @@ int inc(FILE *a, uint8_t *o) {
         int regCode = getRegCode(arg1) << 3;
         o[0] = 0b00000100 | regCode; 
         return 1;
+    } else if (is16BitRegister(arg1)) {
+        int regCode = get16BitRegCode(arg1) << 4;
+        o[0] = 0b00000011 | regCode;
+        return 1;
     }
     error("Unsupported operation for INC!");
     return 0;
@@ -344,6 +407,10 @@ int dec(FILE *a, uint8_t *o) {
     if (isRegister(arg1)) {
         int regCode = getRegCode(arg1) << 3;
         o[0] = 0b00000101 | regCode; 
+        return 1;
+    } else if (is16BitRegister(arg1)) {
+        int regCode = get16BitRegCode(arg1) << 4;
+        o[0] = 0b00001011 | regCode;
         return 1;
     }
     error("Unsupported operation for DEC!");
@@ -392,13 +459,7 @@ int out(FILE *a, uint8_t *o) {
         if (eq(arg2, "A")) {
             //out (port), A
             o[0] = 0xD3;
-            char *a;
-            //find close paren of addressed data 
-            for (a = arg1; *a != ')'; a++) {}
-            *a = 0; //replace close paren with null to terminate string
-            char *b = arg1 + 1; //set up new pointer to directly past first open paren 
-            //we now are set up to use atoi to parse the integer out
-            o[1] = atoi(b);
+            o[1] = getAddressedData(arg1);
             return 2;
         } else {
             error("Cannot perform immediate OUT op on registers other than A!");
@@ -435,6 +496,45 @@ int halt(FILE *a, uint8_t *o) {
     o[0] = 0x76;
     return 1;
 }
+// PUSH reg16
+int push(FILE *a, uint8_t *o) {
+    if (is16BitRegisterWithAF(arg1)) {
+        // x = 3, z = 5, q = 0, p = rp
+        // 11RR0101 
+        o[0] = (get16BitRegCodeWithAF(arg1) << 4) | 0b11000101; 
+        return 1;
+    }
+    error("Unsupported operation for PUSH!");
+}
+// POP reg16
+int pop(FILE *a, uint8_t *o) {
+    if (is16BitRegisterWithAF(arg1)) {
+        // x = 3, z = 1, q = 0, p = rp
+        // XXRRQZZZ
+        o[0] = (get16BitRegCodeWithAF(arg1) << 4) | 0b11000001;
+        return 1;
+    }
+    error("Unsupported operation for POP!");
+}
+// sbc reg16, reg16
+int sbc(FILE *a, uint8_t *o) {
+    // ED prefixed
+    if (is16BitRegister(arg1) && is16BitRegister(arg2)) {
+        o[0] = 0xED;
+        o[1] = (get16BitRegCode(arg1) << 4) | 0b01000010;
+        return 2;
+    }
+    error("Unsupported operation for SBC!");
+}
+int adc(FILE *a, uint8_t *o) {
+    // ED prefixed
+    if (is16BitRegister(arg1) && is16BitRegister(arg2)) {
+        o[0] = 0xED;
+        o[1] = (get16BitRegCode(arg1) << 4) | 0b01001010;
+        return 2;
+    }
+    error("Unsupported operation for ADC!");
+}
 char opStrings[69][10] = {
     "NOP",
     "LD",
@@ -445,6 +545,10 @@ char opStrings[69][10] = {
     "OUT",
     "CP",
     "HALT",
+    "PUSH",
+    "POP",
+    "SBC",
+    "ADC",
     "RCLA",
     "EX",
     "RRCA",
@@ -455,16 +559,12 @@ char opStrings[69][10] = {
     "CPL",
     "SCF",
     "CCF",
-    "ADC",
     "SUB",
-    "SBC",
     "AND",
     "XOR",
     "OR",
     "RET",
-    "POP",
     "CALL",
-    "PUSH",
     "ADD",
     "RST",
     "RLC",
@@ -506,7 +606,7 @@ char opStrings[69][10] = {
     "EI"
     "DAA"
 };
-int IMPLEMENTED = 9;
+int IMPLEMENTED = 13; 
 int (*operations[69])(FILE *, uint8_t *) = {
     nop,
     ld,
@@ -516,7 +616,11 @@ int (*operations[69])(FILE *, uint8_t *) = {
     add,
     out,
     cp,
-    halt
+    halt,
+    push,
+    pop,
+    sbc,
+    adc
 };
 
 
