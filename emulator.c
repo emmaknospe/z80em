@@ -7,21 +7,21 @@
 #define ONS printf("Operation not supported!"); exit(1)
 
 //Registers
-char A; //accumulator
-char F; //flag
+uint8_t A; //accumulator
+uint8_t F; //flag
 
-char B;
-char C;
+uint8_t B;
+uint8_t C;
 
-char D;
-char E;
+uint8_t D;
+uint8_t E;
 
-char H;
-char L;
+uint8_t H;
+uint8_t L;
 
 uint16_t PC;
 
-char mem[MEM_SPACE];
+uint8_t mem[MEM_SPACE];
 int main() {
     return emulate("out"); 
 }
@@ -40,7 +40,7 @@ void dump(int length) {
         printf("%s\n", byteToBinary(mem[i]));
     } 
 }
-char *getRegister(char r) {
+uint8_t *getRegister(uint8_t r) {
     switch (r) {
         case 0: return &B;
         case 1: return &C;
@@ -58,7 +58,7 @@ char *getRegister(char r) {
 #define BIT_C  0b00000001
 #define BIT_PO 0b00000100
 #define BIT_S  0b10000000
-bool checkCondition(char c) {
+bool checkCondition(uint8_t c) {
     switch (c) {
         case 0: return !(BIT_Z & F); 
         case 1: return BIT_Z & F;
@@ -75,8 +75,8 @@ void nop() {
     printf("NOP\n");
     exit(1);
 }
-void inc(char y) {
-    char *reg = getRegister(y);
+void inc(uint8_t y) {
+    uint8_t *reg = getRegister(y);
     uint8_t old = *reg;
     (*reg)++;
     PC++;
@@ -93,18 +93,18 @@ void inc(char y) {
     } 
 }
 //TODO implement changing flags
-void dec(char y) {
-    char *reg = getRegister(y);
+void dec(uint8_t y) {
+    uint8_t *reg = getRegister(y);
     (*reg)--;
     PC++;
 }
-void ldIm(char y) {
-    char *reg = getRegister(y);
+void ldIm(uint8_t y) {
+    uint8_t *reg = getRegister(y);
     PC++;
     (*reg) = mem[PC];
     PC++;
 }
-void jp(char y) {
+void jp(uint8_t y) {
     if (checkCondition(y)) {
         PC++;
         uint16_t first = mem[PC];
@@ -125,8 +125,8 @@ void jpNc() {
     PC = second; 
 }
 void x0() {
-    char y = (mem[PC] & 0b00111000) >> 3;
-    char z = mem[PC] & 0b00000111;
+    uint8_t y = (mem[PC] & 0b00111000) >> 3;
+    uint8_t z = mem[PC] & 0b00000111;
     switch (z) {
         case 0:
             switch (y) {
@@ -140,18 +140,46 @@ void x0() {
     }
 }
 void x1() {
-    char y = (mem[PC] & 0b00111000) >> 3;
-    char z = mem[PC] & 0b00000111;
+    uint8_t y = (mem[PC] & 0b00111000) >> 3;
+    uint8_t z = mem[PC] & 0b00000111;
     ONS;
 }
 void x2() {
-    char y = (mem[PC] & 0b00111000) >> 3;
-    char z = mem[PC] & 0b00000111;
+    //All commands for x = 2 are ALU ops
+    uint8_t y = (mem[PC] & 0b00111000) >> 3;
+    uint8_t z = mem[PC] & 0b00000111;
+    uint8_t *reg = getRegister(z);
+    uint16_t tmp; //recall: cannot declare variables inside switch statements
+    switch (y) {
+        case 0: //ADD A
+            tmp = A + *reg; 
+            F = (tmp > 255) ? (F | BIT_C) : F; //set carry flag if overflow
+            A = tmp;
+            break;
+        case 1: //ADC A
+            tmp = *reg + (F & BIT_C); break;
+            F = (tmp > 255) ? (F | BIT_C) : F; //set carry flag if overflow
+            A = tmp;
+            break;
+        case 2: //SUB
+            A -= *reg; break;
+        case 3: //SBC A
+            A -= *reg + (F & BIT_C); break;
+        case 4: //AND 
+            A = A & *reg; break;
+        case 5: //XOR 
+            A = A ^ *reg; break;
+        case 6: //OR
+            A = A | *reg; break;
+        case 7: //CP
+            A = A - *reg; //flag set here
+            break;
+    }
     ONS;
 }
 void x3() {
-    char y = (mem[PC] & 0b00111000) >> 3;
-    char z = mem[PC] & 0b00000111;
+    uint8_t y = (mem[PC] & 0b00111000) >> 3;
+    uint8_t z = mem[PC] & 0b00000111;
     switch (z) {
         case 2:
             jp(y); return;
@@ -165,7 +193,7 @@ void x3() {
 }
 
 void execute() {
-    char x = (mem[PC] & 0b11000000) >> 6;
+    uint8_t x = (mem[PC] & 0b11000000) >> 6;
     switch (x) {
         case 0: x0(); break;
         case 1: x1(); break;
