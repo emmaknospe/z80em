@@ -4,7 +4,7 @@
 #define DISASSEMBLE true
 #define debug_print(fmt, ...) \
             do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
-#define ONS printf("Operation not supported!"); exit(1)
+#define ONS() printf("Operation not supported!"); exit(1)
 
 
 bool halt = false;
@@ -23,6 +23,8 @@ uint8_t H;
 uint8_t L;
 
 uint16_t PC;
+
+uint16_t SP;
 
 uint8_t mem[MEM_SPACE];
 int main() {
@@ -51,11 +53,45 @@ uint8_t *getRegister(uint8_t r) {
         case 3: return &E;
         case 4: return &H;
         case 5: return &L;
-        case 6: ONS;
+        case 6: ONS();
         case 7: return &A;
     }
-    ONS;
+    ONS();
     return NULL;
+}
+
+void setRegisterPair(uint8_t p, uint16_t newVal) {
+    switch (p) {
+        case 0:
+            C = newVal & 0x00FF;
+            B = (newVal & 0xFF00) >> 8;
+            break;
+        case 1:
+            E = newVal & 0x00FF;
+            D = (newVal & 0xFF00) >> 8;
+            break;
+        case 2:
+            L = newVal & 0x00FF;
+            H = (newVal & 0xFF00) >> 8;
+            break;
+        case 3:
+            SP = newVal;
+    }
+}
+
+uint16_t getRegisterPair(uint8_t p) {
+    uint16_t res = 0;
+    switch (p) {
+        case 0:
+            return ((res | B) << 8) | C;
+        case 1:
+            return ((res | D) << 8) | E;
+        case 2:
+            return ((res | H) << 8) | L;
+        case 3:
+            return SP;
+    }
+    ONS();
 }
 #define BIT_Z  0b01000000 //zero bit
 #define BIT_C  0b00000001 //carry bit
@@ -75,7 +111,7 @@ bool checkCondition(uint8_t c) {
         case 6: return (BIT_S & F);
         case 7: return !(BIT_S & F); 
     }
-    ONS;
+    ONS();
 }
 void setFlags(uint8_t oldA, bool subtracted) {
     //preserve F5 and F3, since undocumented
@@ -105,7 +141,7 @@ void outputToPort(uint8_t portAddr, uint8_t value) {
         case 0: printf("%c", value); return;
         case 1: printf("%i\n", value); return;
     }
-    ONS;
+    ONS();
 }
 
 void nop() {
@@ -119,7 +155,6 @@ void inc(uint8_t y) {
     PC++;
     setFlags(old, false); 
 }
-//TODO implement changing flags
 void dec(uint8_t y) {
     uint8_t *reg = getRegister(y);
     uint8_t old = *reg;
@@ -133,6 +168,25 @@ void ldImOp(uint8_t y) {
     PC++;
     (*reg) = mem[PC];
     PC++;
+}
+//load an immediate operand, 16 bits
+void ldImOp16(uint8_t p) {
+    PC++;
+    uint8_t lsb = mem[PC];
+    PC++;
+    uint8_t msb = mem[PC]; 
+    uint16_t value = lsb | (msb << 8);
+    setRegisterPair(p, value);
+    PC++;
+}
+// add two 16 bit registers
+// TODO: 16 bit flag set
+void add16(uint8_t p) {
+    //adds register pair p to HL
+    PC++;
+    uint16_t hl = getRegisterPair(2);
+    uint16_t summand = getRegisterPair(p);
+    setRegisterPair(2, hl + summand);  
 }
 //OUT (n), A
 void outImOp() {
@@ -190,16 +244,25 @@ void alu8ImOp(uint8_t y) {
 void x0() {
     uint8_t y = (mem[PC] & 0b00111000) >> 3;
     uint8_t z = mem[PC] & 0b00000111;
+    uint8_t q = mem[PC] & 0b00001000; //since only 1 bit, practically a boolean
+    uint8_t p = (mem[PC] & 0b00110000) >> 4;
     switch (z) {
         case 0:
             switch (y) {
                 case 0: nop(); return; 
-                default: ONS;
+                default: ONS();
             } 
+        case 1:
+            if (q) {
+                //q = 1
+                ldImOp16(p); 
+            } else {
+                add16(p);
+            }
         case 4: inc(y); return; 
         case 5: dec(y); return; 
         case 6: ldImOp(y); return; 
-        default: ONS;
+        default: ONS();
     }
 }
 void x1() {
@@ -234,7 +297,7 @@ void x3() {
                 case 2: outImOp(); return; 
             }
         case 6: alu8ImOp(y); return;
-        default: ONS;
+        default: ONS();
     }
 
 }

@@ -26,7 +26,6 @@ int scanToken(FILE *file, int *lines) {
     while ((c = fgetc(file)) != EOF) {
         switch (c) {
             case '\n':
-                (*lines)++;
                 if (bufLength != 0) {
                     ungetc(c, file); //necessary so our instruction parser doesn't overflow onto the next line
                     readBuffer[bufLength] = 0;
@@ -46,7 +45,6 @@ int scanToken(FILE *file, int *lines) {
                         break;
                     } 
                 } 
-                (*lines)++;
                 break;
             default:
                 readBuffer[bufLength] = c;
@@ -119,7 +117,6 @@ void compile(char *assemblyFilename, char *machineFilename) {
         //finish reading the line:
         while ((c = fgetc(assembly)) != EOF && c != '\n') {};
         if (c == EOF) {
-            printf("breaking\n");
             break;
         }
         lines++;
@@ -165,7 +162,6 @@ void compile(char *assemblyFilename, char *machineFilename) {
             }
         } else {
             int size = convertInstruction(assembly, outBuffer, readBuffer, labels, lines, false);
-            lines++;
             fwrite(outBuffer, size, sizeof(uint8_t), out); //standard line, compile
         }
         //finish reading the line:
